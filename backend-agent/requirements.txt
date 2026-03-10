@@ -13,12 +13,12 @@ exceptiongroup==1.3.1
 fastapi==0.128.8
 filetype==1.2.0
 fsspec==2025.10.0
-google-ai-generativelanguage==0.6.15
+google-ai-generativelanguage==0.10.0
 google-api-core==2.30.0
 google-api-python-client==2.192.0
 google-auth==2.49.0
 google-auth-httplib2==0.3.0
-google-generativeai==0.8.6
+google-genai==1.47.0
 googleapis-common-protos==1.73.0
 grpcio==1.78.0
 grpcio-status==1.71.2
@@ -35,7 +35,7 @@ jsonpatch==1.33
 jsonpointer==3.0.0
 langchain==0.3.28
 langchain-core==0.3.83
-langchain-google-genai==2.0.10
+langchain-google-genai==2.1.12
 langchain-text-splitters==0.3.11
 langsmith==0.4.37
 markdown-it-py==3.0.0
