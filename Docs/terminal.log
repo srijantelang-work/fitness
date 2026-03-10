@@ -1,0 +1,8 @@
+e upgrade to the latest Python version, or at least Python 3.10, and then update google.ai.generativelanguage_v1beta.
+  warnings.warn(message, FutureWarning)
+INFO:     Started server process [34169]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+Error processing Telegram msg: {'message': 'insert or update on table "users" violates foreign key constraint "users_id_fkey"', 'code': '23503', 'hint': None, 'details': 'Key (id)=(324da092-2a01-5d88-ad9d-9697848f8108) is not present in table "users".'}
+INFO:     91.108.5.135:0 - "POST /api/telegram/8781248823%3AAAHmoKe_-LF8eoFKQzljCuZCgCd1vueV3m0 HTTP/1.1" 200 OK
