@@ -72,7 +72,11 @@ def run_agent(agent_with_tools, user_message: str, user_id: str, chat_history: l
         
         # If the LLM just replied with text and no tools, we're done
         if not response.tool_calls:
-            return response.content
+            content = response.content
+            if isinstance(content, list):
+                # Extract text blocks if Gemini returns a structured list
+                return "".join(c.get("text", "") for c in content if isinstance(c, dict) and "text" in c)
+            return content
             
         # Agent decided to call tools, append its request to memory
         messages.append(response)
@@ -100,4 +104,7 @@ def run_agent(agent_with_tools, user_message: str, user_id: str, chat_history: l
             messages.append(ToolMessage(tool_call_id=tool_id, name=tool_name, content=str(tool_result)))
             
     # Fallback if loop exhausts
-    return response.content if response.content else "I'm processing your fitness plan, give me a moment to update everything!"
+    content = response.content
+    if isinstance(content, list):
+        content = "".join(c.get("text", "") for c in content if isinstance(c, dict) and "text" in c)
+    return content if content else "I'm processing your fitness plan, give me a moment to update everything!"
