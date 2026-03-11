@@ -1,6 +1,5 @@
 import os
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
+from openclaw import Agent
 from tools import update_user_profile, generate_workout_plan, log_workout
 
 system_prompt = """
@@ -34,77 +33,20 @@ Always provide actionable advice and continue the conversation like a real coach
 """
 
 def create_coach_agent():
-    # Initialize the Gemini model via Langchain
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
-        google_api_key=os.environ.get("GEMINI_API_KEY"),
+    tools = [update_user_profile, generate_workout_plan, log_workout]
+    
+    agent = Agent(
+        model_name="gemini-2.5-flash",
+        tools=tools,
+        system_prompt=system_prompt,
         temperature=0.2
     )
     
-    # Bind our Python tools to the LLM so it can invoke them
-    tools = [update_user_profile, generate_workout_plan, log_workout]
-    agent_with_tools = llm.bind_tools(tools)
-    
-    return agent_with_tools
+    return agent
 
-def run_agent(agent_with_tools, user_message: str, user_id: str, chat_history: list = None):
+def run_agent(agent, user_message: str, user_id: str, chat_history: list = None):
     """
-    Utility function to run the Langchain agent with tools.
-    Now supports history injection and a cyclic execution loop to allow tools to return data to the LLM.
+    Utility function to run the OpenClaw agent.
     """
-    messages = [
-        SystemMessage(content=system_prompt + f"\n\nCurrent Context User ID: {user_id}")
-    ]
-    
-    # Inject previous history to cure amnesia
-    if chat_history:
-        for msg in chat_history:
-            if msg["role"] == "user":
-                messages.append(HumanMessage(content=msg["text"]))
-            elif msg["role"] == "agent":
-                messages.append(AIMessage(content=msg["text"]))
-                
-    messages.append(HumanMessage(content=user_message))
-    
-    # Allow the agent to loop up to 3 times for tool execution
-    for _ in range(3):
-        response = agent_with_tools.invoke(messages)
-        
-        # If the LLM just replied with text and no tools, we're done
-        if not response.tool_calls:
-            content = response.content
-            if isinstance(content, list):
-                # Extract text blocks if Gemini returns a structured list
-                return "".join(c.get("text", "") for c in content if isinstance(c, dict) and "text" in c)
-            return content
-            
-        # Agent decided to call tools, append its request to memory
-        messages.append(response)
-        
-        # Execute all requested tools
-        for tool_call in response.tool_calls:
-            tool_name = tool_call["name"]
-            tool_args = tool_call["args"]
-            tool_id = tool_call["id"]
-            
-            tool_result = ""
-            try:
-                if tool_name == "update_user_profile":
-                    tool_result = update_user_profile.invoke(tool_args)
-                elif tool_name == "generate_workout_plan":
-                    tool_result = generate_workout_plan.invoke(tool_args)
-                elif tool_name == "log_workout":
-                    tool_result = log_workout.invoke(tool_args)
-                else:
-                    tool_result = f"Unknown tool requested: {tool_name}"
-            except Exception as e:
-                tool_result = f"Error executing tool: {str(e)}"
-                
-            # Send the result BACK to the agent so it can keep talking
-            messages.append(ToolMessage(tool_call_id=tool_id, name=tool_name, content=str(tool_result)))
-            
-    # Fallback if loop exhausts
-    content = response.content
-    if isinstance(content, list):
-        content = "".join(c.get("text", "") for c in content if isinstance(c, dict) and "text" in c)
-    return content if content else "I'm processing your fitness plan, give me a moment to update everything!"
+    agent.system_prompt = system_prompt + f"\n\nCurrent Context User ID: {user_id}"
+    return agent.run(user_message, chat_history)

@@ -2,8 +2,6 @@ fastapi
 uvicorn
 pydantic
 supabase
-langchain
-langchain-google-genai>=2.1.12
 google-genai>=1.47.0
 python-dotenv
 httpx
