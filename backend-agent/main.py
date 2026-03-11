@@ -124,20 +124,37 @@ except Exception as e:
     coach_agent = None
 
 from typing import Optional
+from fastapi import Header
+
 class ChatRequest(BaseModel):
-    user_id: str
+    user_id: Optional[str] = None
     message: str
     session_id: Optional[str] = None
 
 class SessionRequest(BaseModel):
-    user_id: str
+    user_id: Optional[str] = None
     title: str = "New Chat"
 
+async def verify_token(authorization: str = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid token")
+    token = authorization.split(" ")[1].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Token empty")
+    try:
+        user_resp = supabase.auth.get_user(token)
+        if not user_resp or not user_resp.user:
+            raise HTTPException(status_code=401, detail="Tokens invalid or expired")
+        return user_resp.user.id
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Verify token error: {e}")
+
 @app.post("/api/sessions")
-async def create_session(request: SessionRequest):
+async def create_session(request: SessionRequest, authorization: str = Header(None)):
+    user_id = await verify_token(authorization)
     try:
         res = supabase.table("chat_sessions").insert({
-            "user_id": request.user_id,
+            "user_id": user_id,
             "title": request.title
         }).execute()
         
@@ -147,10 +164,15 @@ async def create_session(request: SessionRequest):
         return {"session_id": res.data[0]["id"]}
     except Exception as e:
         print(f"Error creating session: {e}")
+        if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/sessions/{user_id}")
-async def get_sessions(user_id: str):
+async def get_sessions(user_id: str, authorization: str = Header(None)):
+    auth_user_id = await verify_token(authorization)
+    if auth_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden: IDOR blocked")
+        
     try:
         res = supabase.table("chat_sessions") \
             .select("id, title, created_at") \
@@ -160,28 +182,36 @@ async def get_sessions(user_id: str):
         return {"sessions": res.data}
     except Exception as e:
         print(f"Error fetching sessions: {e}")
+        if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/chat")
-async def chat_endpoint(request: ChatRequest):
+async def chat_endpoint(request: ChatRequest, authorization: str = Header(None)):
     if not coach_agent:
         raise HTTPException(status_code=500, detail="AI Agent is not initialized properly.")
+        
+    user_id = await verify_token(authorization)
         
     try:
         # 1. Ensure User Profile exists (auto-create if missing from Auth)
         # This prevents foreign key violations in chat_logs
-        user_exists = supabase.table("users").select("id").eq("id", request.user_id).execute()
+        user_exists = supabase.table("users").select("id").eq("id", user_id).execute()
         if not user_exists.data:
-            print(f"Auto-creating missing profile for user: {request.user_id}")
-            supabase.table("users").insert({"id": request.user_id, "name": "New User"}).execute()
+            print(f"Auto-creating missing profile for user: {user_id}")
+            supabase.table("users").insert({"id": user_id, "name": "New User"}).execute()
 
         # 1.5 Handle Session Logic
         session_id = request.session_id
-        if not session_id:
+        if session_id:
+            # Verify the session owned by user
+            session_check = supabase.table("chat_sessions").select("user_id").eq("id", session_id).execute()
+            if not session_check.data or session_check.data[0]["user_id"] != user_id:
+                raise HTTPException(status_code=403, detail="Session does not belong to you")
+        else:
             # Create a new session automatically if not provided
             title = request.message[:30] + "..." if len(request.message) > 30 else request.message
             session_res = supabase.table("chat_sessions").insert({
-                "user_id": request.user_id,
+                "user_id": user_id,
                 "title": title
             }).execute()
             if session_res.data:
@@ -191,7 +221,7 @@ async def chat_endpoint(request: ChatRequest):
 
         # 2. Save User Message to DB
         supabase.table("chat_logs").insert({
-            "user_id": request.user_id,
+            "user_id": user_id,
             "session_id": session_id,
             "message": request.message,
             "role": "user"
@@ -199,22 +229,19 @@ async def chat_endpoint(request: ChatRequest):
 
         # Fetch recent chat history to provide context to the agent
         db_history = supabase.table("chat_logs").select("role, message").eq("session_id", session_id).order("created_at", desc=False).execute()
-        # Exclude the very last message since we already added it OR just pass the ones before it.
-        # Actually, the user message we just inserted is in db_history! We should omit it from the `chat_history` list 
-        # being passed to `run_agent` because `run_agent` appends the current `request.message` manually.
+        
         historical_messages = db_history.data[:-1] if db_history.data else []
-        # Keep the last 15 messages so the agent has context without blowing up tokens
         history_list = [{"role": row["role"], "text": row["message"]} for row in historical_messages[-15:]]
 
         # 3. Run the Langchain Agent
         from agent import run_agent
-        response_text = run_agent(coach_agent, request.message, request.user_id, chat_history=history_list)
+        response_text = run_agent(coach_agent, request.message, user_id, chat_history=history_list)
         print(f"Agent final response: {response_text}")
         
         # 3. Save Agent Response to DB
         if response_text:
             supabase.table("chat_logs").insert({
-                "user_id": request.user_id,
+                "user_id": user_id,
                 "session_id": session_id,
                 "message": str(response_text),
                 "role": "agent"
@@ -223,24 +250,32 @@ async def chat_endpoint(request: ChatRequest):
         return {"reply": str(response_text), "session_id": session_id}
     except Exception as e:
         print(f"Error in chat_endpoint: {e}")
+        if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/history/{session_id}")
-async def get_chat_history(session_id: str):
+async def get_chat_history(session_id: str, authorization: str = Header(None)):
+    user_id = await verify_token(authorization)
     try:
+        # Verify ownership
+        session_check = supabase.table("chat_sessions").select("user_id").eq("id", session_id).execute()
+        if not session_check.data or session_check.data[0]["user_id"] != user_id:
+             raise HTTPException(status_code=403, detail="Session does not belong to you")
+
         response = supabase.table("chat_logs") \
             .select("role, message, created_at") \
             .eq("session_id", session_id) \
             .order("created_at", desc=False) \
             .execute()
         
-        # Map DB roles to frontend expectations if necessary
         history = [{"role": row["role"], "text": row["message"]} for row in response.data]
         return {"history": history}
     except Exception as e:
         print(f"Error fetching history: {e}")
+        if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "agent_loaded": coach_agent is not None}
+
