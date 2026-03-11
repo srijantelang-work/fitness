@@ -142,15 +142,15 @@ async def verify_token(authorization: str = Header(None)):
     if not token:
         raise HTTPException(status_code=401, detail="Token empty")
     try:
-        # CRITICAL: Create a one-off client for verification so we don't pollute 
-        # the global 'supabase' client's service_role headers with a user token.
+        # Isolated client to verify JWT without polluting global state
         from supabase import create_client
-        from db import url
-        temp_client = create_client(url, token)
-        user_resp = temp_client.auth.get_user()
+        from db import url, key
+        # We MUST use the service_role key to initialize the client so it has permission to verify auth tokens
+        auth_client = create_client(url, key)
+        user_resp = auth_client.auth.get_user(token)
         
         if not user_resp or not user_resp.user:
-            raise HTTPException(status_code=401, detail="Tokens invalid or expired")
+            raise HTTPException(status_code=401, detail="Token is invalid or has expired")
         return user_resp.user.id
     except Exception as e:
         print(f"Token Verification Failed: {e}")
