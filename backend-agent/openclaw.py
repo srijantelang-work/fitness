@@ -20,10 +20,10 @@ class Agent:
             for msg in chat_history:
                 # Map role. Gemini supports 'user' and 'model'
                 role = "user" if msg["role"] == "user" else "model"
-                contents.append(types.Content(role=role, parts=[types.Part.from_text(msg["text"])]))
+                contents.append(types.Content(role=role, parts=[types.Part.from_text(text=msg["text"])]))
                 
         # Append current user message
-        contents.append(types.Content(role="user", parts=[types.Part.from_text(user_message)]))
+        contents.append(types.Content(role="user", parts=[types.Part.from_text(text=user_message)]))
         
         config = types.GenerateContentConfig(
             system_instruction=self.system_prompt,
