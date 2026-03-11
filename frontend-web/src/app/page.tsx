@@ -58,7 +58,8 @@ export default function Home() {
 
   const fetchSessions = async (userId: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/sessions/${userId}`)
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const res = await fetch(`${apiUrl}/api/sessions/${userId}`)
       if (res.ok) {
         const data = await res.json()
         setSessions(data.sessions)
@@ -81,7 +82,8 @@ export default function Home() {
 
   const fetchHistory = async (sessionId: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/history/${sessionId}`)
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const res = await fetch(`${apiUrl}/api/history/${sessionId}`)
       if (res.ok) {
         const data = await res.json()
         setMessages(data.history)
@@ -115,7 +117,8 @@ export default function Home() {
     setIsTyping(true)
 
     try {
-      const res = await fetch('http://localhost:8000/api/chat', {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const res = await fetch(`${apiUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: user.id, message: input, session_id: currentSessionId })
