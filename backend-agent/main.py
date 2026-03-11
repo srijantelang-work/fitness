@@ -195,17 +195,22 @@ async def chat_endpoint(request: ChatRequest, authorization: str = Header(None))
     try:
         # 1. Ensure User Profile exists (auto-create if missing from Auth)
         # This prevents foreign key violations in chat_logs
+        print(f"DEBUG: Checking if profile exists for user_id: {user_id}")
         user_exists = supabase.table("users").select("id").eq("id", user_id).execute()
+        
         if not user_exists.data:
-            print(f"Auto-creating missing profile for user: {user_id}")
-            supabase.table("users").insert({"id": user_id, "name": "New User"}).execute()
+            print(f"DEBUG: Profile NOT found. Attempting auto-creation for: {user_id}")
+            insert_res = supabase.table("users").insert({"id": user_id, "name": "New User"}).execute()
+            print(f"DEBUG: Insert result: {insert_res}")
 
         # 1.5 Handle Session Logic
         session_id = request.session_id
         if session_id:
+            print(f"DEBUG: Verifying session ownership: {session_id}")
             # Verify the session owned by user
             session_check = supabase.table("chat_sessions").select("user_id").eq("id", session_id).execute()
             if not session_check.data or session_check.data[0]["user_id"] != user_id:
+                print(f"DEBUG: Session ownership check FAILED for user: {user_id}")
                 raise HTTPException(status_code=403, detail="Session does not belong to you")
         else:
             # Create a new session automatically if not provided
