@@ -29,7 +29,7 @@ def send_telegram_message(chat_id: int, text: str):
     payload = {
         "chat_id": chat_id,
         "text": text,
-        "parse_mode": "Markdown"
+        "parse_mode": ""
     }
     try:
         httpx.post(url, json=payload)
