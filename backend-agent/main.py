@@ -52,7 +52,7 @@ async def telegram_webhook(request: Request):
         try:
             auth_resp = supabase.auth.sign_in_with_password({"email": email, "password": password})
             mapped_user_id = auth_resp.user.id
-        except Exception:
+        except Exception as e_sign_in:
             try:
                 user_data = supabase.auth.admin.create_user({
                     "email": email, 
@@ -60,9 +60,10 @@ async def telegram_webhook(request: Request):
                     "email_confirm": True
                 })
                 mapped_user_id = user_data.user.id
-            except Exception as e:
-                print(f"Auth user provisioning error: {e}")
-                mapped_user_id = str(uuid.uuid5(uuid.NAMESPACE_OID, str(chat_id)))
+            except Exception as e_create:
+                print(f"Auth user provisioning error: {e_create}")
+                send_telegram_message(chat_id, f"DEBUG AUTH CRASH: Sign In failed with `{e_sign_in}` and Create User failed with `{e_create}`. Because of the database constraints I cannot proceed.")
+                return {"status": "error"}
 
         if coach_agent:
             try:
@@ -105,8 +106,10 @@ async def telegram_webhook(request: Request):
                     
                 send_telegram_message(chat_id, str(response_text))
             except Exception as e:
+                import traceback
+                error_trace = traceback.format_exc()
                 print(f"Error processing Telegram msg: {e}")
-                send_telegram_message(chat_id, "I hit a snag. Let's try that again.")
+                send_telegram_message(chat_id, f"I hit a snag.\n\n`{error_trace}`")
 
     return {"status": "ok"}
 
