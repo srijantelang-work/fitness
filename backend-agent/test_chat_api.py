@@ -19,7 +19,7 @@ except Exception:
 print(f"Got token! User ID: {user_id}")
 print("Testing /api/chat endpoint...")
 
-url = "http://127.0.0.1:8000/api/chat"
+url = "http://127.0.0.1:8001/api/chat"
 headers = {
     "Authorization": f"Bearer {token}",
     "Content-Type": "application/json"
